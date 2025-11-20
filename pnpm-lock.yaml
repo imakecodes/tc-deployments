@@ -8,6 +8,9 @@ importers:
 
   .:
     dependencies:
+      '@influxdata/influxdb-client':
+        specifier: ^1.35.0
+        version: 1.35.0
       '@sentry/node':
         specifier: ^10.26.0
         version: 10.26.0
@@ -19,6 +22,9 @@ packages:
 
   '@apm-js-collab/tracing-hooks@0.3.1':
     resolution: {integrity: sha512-Vu1CbmPURlN5fTboVuKMoJjbO5qcq9fA5YXpskx3dXe/zTBvjODFoerw+69rVBlRLrJpwPqSDqEuJDEKIrTldw==}
+
+  '@influxdata/influxdb-client@1.35.0':
+    resolution: {integrity: sha512-woWMi8PDpPQpvTsRaUw4Ig+nOGS/CWwAwS66Fa1Vr/EkW+NEwxI8YfPBsdBMn33jK2Y86/qMiiuX/ROHIkJLTw==}
 
   '@opentelemetry/api-logs@0.204.0':
     resolution: {integrity: sha512-DqxY8yoAaiBPivoJD4UtgrMS8gEmzZ5lnaxzPojzLVHBGqPxgWm4zcuvcUHZiqQ6kRX2Klel2r9y8cA2HAtqpw==}
@@ -400,6 +406,8 @@ snapshots:
       module-details-from-path: 1.0.4
     transitivePeerDependencies:
       - supports-color
+
+  '@influxdata/influxdb-client@1.35.0': {}
 
   '@opentelemetry/api-logs@0.204.0':
     dependencies:

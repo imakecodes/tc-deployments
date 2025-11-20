@@ -1,4 +1,5 @@
 const Sentry = require("@sentry/node");
+const { InfluxDB, Point } = require('@influxdata/influxdb-client');
 
 const {
     SERVICE = "unknown-service",
@@ -9,6 +10,13 @@ const {
     DEPLOY_VERSION = "qa",
     DEPLOY_WEBHOOK_URL = "https://n8n.ops.makecodes.dev/webhook/deployments",
     DEPLOY_TIMEOUT_MS = "3600000",
+    ENABLE_INFLUXDB = "false",
+    INFLUXDB_URL = "",
+    INFLUXDB_TOKEN = "",
+    INFLUXDB_ORG = "",
+    INFLUXDB_BUCKET = "",
+    ORGANIZATION = "",
+    REPOSITORY = "",
 } = process.env;
 
 const fetchFn = global.fetch;
@@ -18,22 +26,42 @@ if (typeof fetchFn !== "function" || !AbortSignal?.timeout) {
     throw new Error("Required web APIs (fetch, AbortSignal.timeout) are unavailable.");
 }
 
-Sentry.init({
-    dsn: SENTRY_DSN,
-    sendDefaultPii: false,
-    enableLogs: true,
-    environment: "ci",
-    _experiments: {
-        enableMetrics: true,
-    },
-});
+if (SENTRY_DSN) {
+    Sentry.init({
+        dsn: SENTRY_DSN,
+        sendDefaultPii: false,
+        enableLogs: true,
+        environment: "ci",
+        _experiments: {
+            enableMetrics: true,
+        },
+    });
+}
 
-const logger = Sentry.logger;
+const logger = SENTRY_DSN ? Sentry.logger : {
+    info: (msg, ...args) => console.log(msg, ...args),
+    error: (msg, ...args) => console.error(msg, ...args),
+    debug: (msg, ...args) => console.debug(msg, ...args),
+    fmt: (strings, ...values) => {
+        return strings.reduce((result, str, i) => {
+            return result + str + (values[i] || "");
+        }, "");
+    }
+};
+
 const baseMetricAttributes = {
     environment: "ci",
     service: SERVICE,
     component: COMPONENT,
+    organization: ORGANIZATION,
+    repository: REPOSITORY,
 };
+
+let influxWriteApi;
+if (ENABLE_INFLUXDB === 'true' && INFLUXDB_URL && INFLUXDB_TOKEN && INFLUXDB_ORG && INFLUXDB_BUCKET) {
+    const influxDB = new InfluxDB({ url: INFLUXDB_URL, token: INFLUXDB_TOKEN });
+    influxWriteApi = influxDB.getWriteApi(INFLUXDB_ORG, INFLUXDB_BUCKET);
+}
 
 const METRIC_NAMES = {
     WEBHOOK_ATTEMPT: "deploy.webhook_attempt",
@@ -48,15 +76,42 @@ const METRIC_NAMES = {
 
 const metrics = {
     count: (name, value = 1, attributes = {}) => {
-        Sentry.metrics?.count?.(name, value, {
-            attributes: { ...baseMetricAttributes, ...attributes },
-        });
+        if (SENTRY_DSN) {
+            Sentry.metrics?.count?.(name, value, {
+                attributes: { ...baseMetricAttributes, ...attributes },
+            });
+        }
+
+        if (influxWriteApi) {
+            const point = new Point(name)
+                .floatField('value', value);
+            
+            const allAttributes = { ...baseMetricAttributes, ...attributes };
+            for (const [key, val] of Object.entries(allAttributes)) {
+                point.tag(key, String(val));
+            }
+            influxWriteApi.writePoint(point);
+        }
     },
     distribution: (name, value, { unit, attributes = {} } = {}) => {
-        Sentry.metrics?.distribution?.(name, value, {
-            ...(unit && { unit }),
-            attributes: { ...baseMetricAttributes, ...attributes },
-        });
+        if (SENTRY_DSN) {
+            Sentry.metrics?.distribution?.(name, value, {
+                ...(unit && { unit }),
+                attributes: { ...baseMetricAttributes, ...attributes },
+            });
+        }
+
+        if (influxWriteApi) {
+            const point = new Point(name)
+                .floatField('value', value);
+            
+            const allAttributes = { ...baseMetricAttributes, ...attributes };
+            for (const [key, val] of Object.entries(allAttributes)) {
+                point.tag(key, String(val));
+            }
+            if (unit) point.tag('unit', unit);
+            influxWriteApi.writePoint(point);
+        }
     },
 };
 
@@ -77,6 +132,8 @@ const triggerDeployment = async () => {
         image: DEPLOY_IMAGE,
         version: DEPLOY_VERSION,
         component: COMPONENT,
+        organization: ORGANIZATION,
+        repository: REPOSITORY,
     };
 
     const signal = AbortSignal.timeout(Number(DEPLOY_TIMEOUT_MS) || 3600000);
@@ -130,10 +187,6 @@ const triggerDeployment = async () => {
 };
 
 async function main() {
-    if (!SENTRY_DSN) {
-        throw new Error("Missing required environment variable 'SENTRY_DSN'.");
-    }
-
     metrics.count(METRIC_NAMES.RUN_STARTED, 1);
     const startedAt = Date.now();
     let success = false;
@@ -157,7 +210,18 @@ async function main() {
             attributes: { status: success ? "success" : "failure" },
         });
 
-        await Sentry.flush(5000);
+        if (SENTRY_DSN) {
+            await Sentry.flush(5000);
+        }
+
+        if (influxWriteApi) {
+            try {
+                await influxWriteApi.close();
+                logger.info('InfluxDB metrics flushed.');
+            } catch (e) {
+                logger.error('Error flushing InfluxDB metrics', e);
+            }
+        }
 
         if (!success) {
             process.exit(1);

@@ -8,9 +8,15 @@ inputs:
     description: 'Component name'
     required: true
     default: 'deployment'
+  organization:
+    description: 'Organization name'
+    required: false
+  repository:
+    description: 'Repository name'
+    required: false
   sentry_dsn:
     description: 'Sentry DSN'
-    required: true
+    required: false
   auth:
     description: 'Basic Auth for Webhook'
     required: true
@@ -30,7 +36,22 @@ inputs:
     description: 'Timeout in ms'
     required: false
     default: '3600000'
-
+  enable_influxdb:
+    description: 'Enable InfluxDB reporting'
+    required: false
+    default: 'false'
+  influxdb_url:
+    description: 'InfluxDB URL'
+    required: false
+  influxdb_token:
+    description: 'InfluxDB Token'
+    required: false
+  influxdb_org:
+    description: 'InfluxDB Organization'
+    required: false
+  influxdb_bucket:
+    description: 'InfluxDB Bucket'
+    required: false
 
 runs:
   using: "composite"
@@ -43,7 +64,8 @@ runs:
       shell: bash
       run: |
         cd ${{ github.action_path }}
-        npm install --no-save --omit=dev
+        npm install -g pnpm
+        pnpm install --prod
 
     - name: Run deployment script
       shell: bash
@@ -51,9 +73,16 @@ runs:
       env:
         SERVICE: ${{ inputs.service }}
         COMPONENT: ${{ inputs.component }}
+        ORGANIZATION: ${{ inputs.organization || github.repository_owner }}
+        REPOSITORY: ${{ inputs.repository || github.event.repository.name }}
         SENTRY_DSN: ${{ inputs.sentry_dsn }}
         AUTH: ${{ inputs.auth }}
         DEPLOY_IMAGE: ${{ inputs.deploy_image }}
         DEPLOY_VERSION: ${{ inputs.deploy_version }}
         DEPLOY_WEBHOOK_URL: ${{ inputs.deploy_webhook_url }}
         DEPLOY_TIMEOUT_MS: ${{ inputs.deploy_timeout_ms }}
+        ENABLE_INFLUXDB: ${{ inputs.enable_influxdb }}
+        INFLUXDB_URL: ${{ inputs.influxdb_url }}
+        INFLUXDB_TOKEN: ${{ inputs.influxdb_token }}
+        INFLUXDB_ORG: ${{ inputs.influxdb_org }}
+        INFLUXDB_BUCKET: ${{ inputs.influxdb_bucket }}
