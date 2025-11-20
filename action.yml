@@ -1,0 +1,59 @@
+name: 'Deployment'
+description: 'Trigger deployment webhook and report to Sentry'
+inputs:
+  service:
+    description: 'Service name'
+    required: true
+  component:
+    description: 'Component name'
+    required: true
+    default: 'deployment'
+  sentry_dsn:
+    description: 'Sentry DSN'
+    required: true
+  auth:
+    description: 'Basic Auth for Webhook'
+    required: true
+  deploy_image:
+    description: 'Docker image'
+    required: true
+    default: 'git.makecodes.dev/viaartistica/crm-backend'
+  deploy_version:
+    description: 'Version to deploy'
+    required: true
+    default: 'qa'
+  deploy_webhook_url:
+    description: 'Webhook URL'
+    required: true
+    default: 'https://n8n.ops.makecodes.dev/webhook/viaartistica-crm-qa-deployments'
+  deploy_timeout_ms:
+    description: 'Timeout in ms'
+    required: false
+    default: '3600000'
+
+
+runs:
+  using: "composite"
+  steps:
+    - uses: actions/setup-node@v4
+      with:
+        node-version: '20'
+    
+    - name: Install dependencies
+      shell: bash
+      run: |
+        cd ${{ github.action_path }}
+        npm install --no-save --omit=dev
+
+    - name: Run deployment script
+      shell: bash
+      run: node ${{ github.action_path }}/main.js
+      env:
+        SERVICE: ${{ inputs.service }}
+        COMPONENT: ${{ inputs.component }}
+        SENTRY_DSN: ${{ inputs.sentry_dsn }}
+        AUTH: ${{ inputs.auth }}
+        DEPLOY_IMAGE: ${{ inputs.deploy_image }}
+        DEPLOY_VERSION: ${{ inputs.deploy_version }}
+        DEPLOY_WEBHOOK_URL: ${{ inputs.deploy_webhook_url }}
+        DEPLOY_TIMEOUT_MS: ${{ inputs.deploy_timeout_ms }}

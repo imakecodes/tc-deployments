@@ -1,0 +1,17 @@
+{
+  "name": "sentry-report",
+  "version": "1.0.0",
+  "description": "",
+  "main": "index.js",
+  "scripts": {
+    "report": "node main.js",
+    "metrics": "node metrics.js"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "packageManager": "pnpm@10.22.0",
+  "dependencies": {
+    "@sentry/node": "^10.26.0"
+  }
+}
