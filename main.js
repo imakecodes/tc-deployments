@@ -63,6 +63,27 @@ if (ENABLE_INFLUXDB === 'true' && INFLUXDB_URL && INFLUXDB_TOKEN && INFLUXDB_ORG
     influxWriteApi = influxDB.getWriteApi(INFLUXDB_ORG, INFLUXDB_BUCKET);
 }
 
+const logInfluxError = (error, action = "operation") => {
+    logger.error(`InfluxDB ${action} failed`, { error: error?.message || error });
+};
+
+const writeInfluxPoint = ({ name, value, attributes = {}, unit }) => {
+    if (!influxWriteApi) return;
+    try {
+        const point = new Point(name).floatField('value', value);
+
+        const allAttributes = { ...baseMetricAttributes, ...attributes };
+        for (const [key, val] of Object.entries(allAttributes)) {
+            point.tag(key, String(val));
+        }
+        if (unit) point.tag('unit', unit);
+
+        influxWriteApi.writePoint(point);
+    } catch (error) {
+        logInfluxError(error, 'write');
+    }
+};
+
 const METRIC_NAMES = {
     WEBHOOK_ATTEMPT: "deploy.webhook_attempt",
     WEBHOOK_FAILURE: "deploy.webhook_failure",
@@ -82,16 +103,7 @@ const metrics = {
             });
         }
 
-        if (influxWriteApi) {
-            const point = new Point(name)
-                .floatField('value', value);
-            
-            const allAttributes = { ...baseMetricAttributes, ...attributes };
-            for (const [key, val] of Object.entries(allAttributes)) {
-                point.tag(key, String(val));
-            }
-            influxWriteApi.writePoint(point);
-        }
+        writeInfluxPoint({ name, value, attributes });
     },
     distribution: (name, value, { unit, attributes = {} } = {}) => {
         if (SENTRY_DSN) {
@@ -101,17 +113,7 @@ const metrics = {
             });
         }
 
-        if (influxWriteApi) {
-            const point = new Point(name)
-                .floatField('value', value);
-            
-            const allAttributes = { ...baseMetricAttributes, ...attributes };
-            for (const [key, val] of Object.entries(allAttributes)) {
-                point.tag(key, String(val));
-            }
-            if (unit) point.tag('unit', unit);
-            influxWriteApi.writePoint(point);
-        }
+        writeInfluxPoint({ name, value, attributes, unit });
     },
 };
 
