@@ -63,6 +63,7 @@ runs:
     - name: Install dependencies
       shell: bash
       run: |
+        export NODE_OPTIONS="--no-deprecation"
         cd ${{ github.action_path }}
         npm install -g pnpm
         pnpm install --prod
@@ -71,6 +72,7 @@ runs:
       shell: bash
       run: node ${{ github.action_path }}/main.js
       env:
+        NODE_OPTIONS: "--no-deprecation"
         SERVICE: ${{ inputs.service }}
         COMPONENT: ${{ inputs.component }}
         ORGANIZATION: ${{ inputs.organization || github.repository_owner }}
