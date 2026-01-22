@@ -1,6 +1,3 @@
-const Sentry = require("@sentry/node");
-const { InfluxDB, Point } = require('@influxdata/influxdb-client');
-
 const {
     SERVICE = "unknown-service",
     COMPONENT = "deployment",
@@ -19,6 +16,22 @@ const {
     REPOSITORY = "",
 } = process.env;
 
+let Sentry;
+if (SENTRY_DSN) {
+    Sentry = require("@sentry/node");
+}
+
+let InfluxDB, Point;
+try {
+    if (ENABLE_INFLUXDB === 'true') {
+        const influxModule = require('@influxdata/influxdb-client');
+        InfluxDB = influxModule.InfluxDB;
+        Point = influxModule.Point;
+    }
+} catch (e) {
+    console.warn("InfluxDB client could not be loaded", e);
+}
+
 const fetchFn = global.fetch;
 const { AbortSignal } = global;
 
@@ -26,7 +39,7 @@ if (typeof fetchFn !== "function" || !AbortSignal?.timeout) {
     throw new Error("Required web APIs (fetch, AbortSignal.timeout) are unavailable.");
 }
 
-if (SENTRY_DSN) {
+if (SENTRY_DSN && Sentry) {
     Sentry.init({
         dsn: SENTRY_DSN,
         sendDefaultPii: false,
@@ -38,7 +51,7 @@ if (SENTRY_DSN) {
     });
 }
 
-const logger = SENTRY_DSN ? Sentry.logger : {
+const logger = (SENTRY_DSN && Sentry) ? Sentry.logger : {
     info: (msg, ...args) => console.log(msg, ...args),
     error: (msg, ...args) => console.error(msg, ...args),
     debug: (msg, ...args) => console.debug(msg, ...args),
@@ -58,7 +71,7 @@ const baseMetricAttributes = {
 };
 
 let influxWriteApi;
-if (ENABLE_INFLUXDB === 'true' && INFLUXDB_URL && INFLUXDB_TOKEN && INFLUXDB_ORG && INFLUXDB_BUCKET) {
+if (ENABLE_INFLUXDB === 'true' && INFLUXDB_URL && INFLUXDB_TOKEN && INFLUXDB_ORG && INFLUXDB_BUCKET && InfluxDB) {
     const influxDB = new InfluxDB({ url: INFLUXDB_URL, token: INFLUXDB_TOKEN });
     influxWriteApi = influxDB.getWriteApi(INFLUXDB_ORG, INFLUXDB_BUCKET);
 }
@@ -97,7 +110,7 @@ const METRIC_NAMES = {
 
 const metrics = {
     count: (name, value = 1, attributes = {}) => {
-        if (SENTRY_DSN) {
+        if (SENTRY_DSN && Sentry) {
             Sentry.metrics?.count?.(name, value, {
                 attributes: { ...baseMetricAttributes, ...attributes },
             });
@@ -106,7 +119,7 @@ const metrics = {
         writeInfluxPoint({ name, value, attributes });
     },
     distribution: (name, value, { unit, attributes = {} } = {}) => {
-        if (SENTRY_DSN) {
+        if (SENTRY_DSN && Sentry) {
             Sentry.metrics?.distribution?.(name, value, {
                 ...(unit && { unit }),
                 attributes: { ...baseMetricAttributes, ...attributes },
@@ -212,7 +225,7 @@ async function main() {
             attributes: { status: success ? "success" : "failure" },
         });
 
-        if (SENTRY_DSN) {
+        if (SENTRY_DSN && Sentry) {
             await Sentry.flush(5000);
         }
 
